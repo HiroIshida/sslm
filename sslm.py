@@ -3,7 +3,8 @@ import numpy as np
 import numpy.linalg as la
 import numpy.random as rn
 import cvxopt
-import math
+from math import *
+import scipy.optimize 
 
 def gen_diadig(vec):
     n = vec.size
@@ -14,7 +15,7 @@ def gen_diadig(vec):
 
 class SSLM:
 
-    def __init__(self, X, y, kern, nu = 1.0, nu1 = 0.2, nu2 = 0.2):
+    def __init__(self, X, y, kern, nu = 1.0, nu1 = 0.2, nu2 = 0.2, proba = False):
         self.X = X
         self.y = y
         self.kern = kern
@@ -25,14 +26,24 @@ class SSLM:
         self.N = len(y)
         self.m1 = (self.N + sum(y))/2
         self.m2 = self.N - self.m1
+        self.proba = proba
 
 
         self.R, self.rho, self.cc, self.a_lst, self.idxes_SVp, self.idxes_SVn\
                 = self._compute_important_parameters()
 
+        if proba:
+            self.A_sigmoid, self.B_sigmoid = self._fit_sigmoid()
+        else:
+            self.A_sigmoid, self.B_sigmoid = None, None
+
     def predict(self, x):
         val = (self.R**2 - self.cc - self.kern(x, x) + sum(2 * self.kern(self.X.T, x).flatten() * self.a_lst * self.y)).item()
         return val
+
+    def predict_proba(self, x):
+        prob = 1.0/(1 + exp(self.A_sigmoid * self.predict(x) + self.B_sigmoid))
+        return prob
 
     def _compute_important_parameters(self):
         gram, gramymat, a_lst = self._solve_qp()
@@ -62,8 +73,8 @@ class SSLM:
         n2 = len(idxes_S2)
         print P1
         print P2
-        R = math.sqrt(P1/n1)
-        rho = math.sqrt(P2/n2 - P1/n1)
+        R = sqrt(P1/n1)
+        rho = sqrt(P2/n2 - P1/n1)
         return R, rho, cc, a_lst, idxes_S1, idxes_S2
 
     def _solve_qp(self):
@@ -101,4 +112,23 @@ class SSLM:
         sol = cvxopt.solvers.qp(P, q, A=A, b=b, G=G, h=h)
         a_lst = np.array([sol["x"][i] for i in range(self.N)])
         return gram, gramymat, a_lst
+
+    def _fit_sigmoid(self):
+        # notation is similar to platt's paper
+        t_pos = (self.m1 + 1.0)/(self.m1 + 2.0)
+        t_neg = 1.0/(self.m2 + 2.0)
+        logical = (self.y > 0)
+        t_vec = logical * t_pos + ~logical * t_neg
+        f_vec = np.array([self.predict(self.X[:, i]) for i in range(self.N)])
+
+        def func(params):
+            A, B = params
+            probs = 1.0/(1.0 + np.exp(A * f_vec + B))
+            values = - (t_vec * np.log(probs) + (1 - t_vec) * np.log(1 - probs))
+            val = sum(values)
+            return val
+
+        sol = scipy.optimize.minimize(func, [0, 0], method = "powell")
+        A_sigmoid, B_sigmoid = sol.x
+        return A_sigmoid, B_sigmoid
 
