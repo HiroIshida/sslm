@@ -2,6 +2,7 @@ from sslm import *
 import matplotlib.pyplot as plt
 from math import *
 from scipy.optimize import minimize
+import time 
 
 def show2d(func, bmin, bmax, N = 20, fax = None, levels = None):
     # fax is (fix, ax)
@@ -70,7 +71,7 @@ def gen_dataset(N):
 
 if __name__ == '__main__':
     rn.seed(5)
-    N = 100
+    N = 1000
     X, y, n_p = gen_dataset(N)
     rbf_kernel_custom = lambda *args: rbf_kernel(*args, gamma = 10.0)
     #kern = linear_kernel
@@ -79,27 +80,36 @@ if __name__ == '__main__':
     sslm = SSLM(X, y, kern, nu = 1.0, nu1 = 0.01, nu2 = 0.01)
     sslm.predict([0, 0.8])
 
+
+    t_pos = (sslm.m1 + 1.0)/(sslm.m1 + 2.0)
+    t_neg = 1.0/(sslm.m2 + 2.0)
+    logical = (y > 0)
+    t_vec = logical * t_pos + ~logical * t_neg
+    f_vec = np.array([sslm.predict(sslm.X[:, i]) for i in range(N)])
+
     def F(A, B):
-        val = 0.0
-        for i in range(sslm.N):
-            if y[i] == 1:
-                t = (sslm.m1 + 1.0)/(sslm.m1 + 2.0)
-            else:
-                t = 1.0/(sslm.m2 + 2.0)
-            f = sslm.predict(sslm.X[:, i])
-            p = 1.0/(1 + exp(A * f + B))
-            val -= t * log(p) + (1 - t)*log(1-p)
+        probs = 1.0/(1.0 + np.exp(A * f_vec + B))
+        values = - (t_vec * np.log(probs) + (1 - t_vec) * np.log(1 - probs))
+        val = sum(values)
         return val
 
     def F_(x):
         return F(x[0], x[1])
 
+    ts = time.time()
     sol = minimize(F_, [0.1, 0.1], method = "powell")
+    te = time.time()
+    t_diff = te - ts
     A = sol.x[0]; B = sol.x[1]
     prob = lambda x: 1.0/(1 + exp(A * sslm.predict(x) + B))
+    print(A)
+    print(B)
+    print(t_diff)
 
 
+    
     ## plot
+    """
     fig, ax = plt.subplots() 
     bmin = np.array([-1, -1])
     bmax = np.array([1, 1])
@@ -117,5 +127,6 @@ if __name__ == '__main__':
     plt.scatter(X[0, sslm.idxes_SVp], X[1, sslm.idxes_SVp], c = "blue", marker = 's', s = 30)
     plt.scatter(X[0, sslm.idxes_SVn], X[1, sslm.idxes_SVn], c = "red", marker = 's', s = 30)
     plt.show()
+    """
 
 
