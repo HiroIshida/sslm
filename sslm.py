@@ -31,7 +31,7 @@ class SSLM:
                 = self._compute_important_parameters()
 
     def predict(self, x):
-        val = (self.R**2 - self.cc - self.kern(x, x, gamma = 10) + sum(2 * self.kern(self.X.T, x, gamma = 10).flatten() * self.a_lst * self.y)).item()
+        val = (self.R**2 - self.cc - self.kern(x, x) + sum(2 * self.kern(self.X.T, x).flatten() * self.a_lst * self.y)).item()
         return val
 
     def _compute_important_parameters(self):
@@ -69,7 +69,7 @@ class SSLM:
     def _solve_qp(self):
         Ymat = gen_diadig(np.array(self.y))
 
-        gram = self.kern(self.X.T, gamma = 10)
+        gram = self.kern(self.X.T)
         gram_diag_matrix = np.diag(gram)
 
         gramymat = gram * Ymat
