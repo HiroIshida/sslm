@@ -1,5 +1,7 @@
 from sslm import *
 import matplotlib.pyplot as plt
+from math import *
+from scipy.optimize import minimize
 
 def show2d(func, bmin, bmax, N = 20, fax = None, levels = None):
     # fax is (fix, ax)
@@ -42,8 +44,8 @@ def modified_banana_function(x_):
     return binary
 
 def gen_dataset(N):
-    #predicate = lambda x: x[0]**2 + x[1]**2 < 0.5 ** 2
-    predicate = lambda x: modified_banana_function(x)
+    predicate = lambda x: x[0]**2 + x[1]**2 < 0.5 ** 2
+    #predicate = lambda x: modified_banana_function(x)
 
     xp_lst = []
     xm_lst = []
@@ -68,36 +70,52 @@ def gen_dataset(N):
 
 if __name__ == '__main__':
     rn.seed(5)
-    N = 400
+    N = 100
     X, y, n_p = gen_dataset(N)
-    kern = rbf_kernel  
+    rbf_kernel_custom = lambda *args: rbf_kernel(*args, gamma = 10.0)
     #kern = linear_kernel
+    kern = rbf_kernel_custom
 
-    sslm = SSLM(X, y, kern, nu = 1.0, nu1 = 0.05, nu2 = 0.02)
+    sslm = SSLM(X, y, kern, nu = 1.0, nu1 = 0.01, nu2 = 0.01)
     sslm.predict([0, 0.8])
+
+    def F(A, B):
+        val = 0.0
+        for i in range(sslm.N):
+            if y[i] == 1:
+                t = (sslm.m1 + 1.0)/(sslm.m1 + 2.0)
+            else:
+                t = 1.0/(sslm.m2 + 2.0)
+            f = sslm.predict(sslm.X[:, i])
+            p = 1.0/(1 + exp(A * f + B))
+            val -= t * log(p) + (1 - t)*log(1-p)
+        return val
+
+    def F_(x):
+        return F(x[0], x[1])
+
+    sol = minimize(F_, [0.1, 0.1], method = "powell")
+    A = sol.x[0]; B = sol.x[1]
+    prob = lambda x: 1.0/(1 + exp(A * sslm.predict(x) + B))
 
 
     ## plot
-
     fig, ax = plt.subplots() 
-
-
     bmin = np.array([-1, -1])
     bmax = np.array([1, 1])
     def f(x):
-        tmp = sslm.predict(x)
+        tmp = prob(x)
         return tmp, tmp
     show2d(f, bmin, bmax, fax = (fig, ax))
 
     idx_positive = np.where(y == 1)
     idx_negative = np.where(y == -1)
 
-    plt.scatter(X[0, idx_positive], X[1, idx_positive], c = "blue")
-    plt.scatter(X[0, idx_negative], X[1, idx_negative], c = "red")
+    plt.scatter(X[0, idx_positive], X[1, idx_positive], c = "blue", s = 10)
+    plt.scatter(X[0, idx_negative], X[1, idx_negative], c = "red", s = 10)
 
-    plt.scatter(X[0, sslm.idxes_SVp], X[1, sslm.idxes_SVp], c = "blue", marker = 'v', s = 100)
-    plt.scatter(X[0, sslm.idxes_SVn], X[1, sslm.idxes_SVn], c = "red", marker = 'v', s = 100)
-
+    plt.scatter(X[0, sslm.idxes_SVp], X[1, sslm.idxes_SVp], c = "blue", marker = 's', s = 30)
+    plt.scatter(X[0, sslm.idxes_SVn], X[1, sslm.idxes_SVn], c = "red", marker = 's', s = 30)
     plt.show()
 
 
